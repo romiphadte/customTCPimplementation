@@ -10,12 +10,51 @@ This is a skeleton sender class. Create a fantastic transport protocol here.
 class Sender(BasicSender.BasicSender):
     def __init__(self, dest, port, filename, debug=False, sackMode=False):
         super(Sender, self).__init__(dest, port, filename, debug)
+        self.window = 5
         if sackMode:
             raise NotImplementedError #remove this line when you implement SACK
 
     # Main sending loop.
     def start(self):
-        raise NotImplementedError
+        # start packet
+        seqno = 0
+        data = self.infile.read(1400)
+        start_msg = "start|%s|%s|" % (seqno,data)
+        checksum = generate_checksum(start_msg)
+        start_msg += checksum
+        packet = self.make_packet('start',seqno,start_msg)
+        self.send(packet)
+        response = self.receive(500)
+        if response is None:
+            self.handle_timeout()
+        # send data
+        data = self.infile.read(1400)
+        finished = False
+        type = "data"
+        while not finished:
+            if in_flight <= window:
+                seqno += 1
+                next_data = self.infile.read(1400)
+                if next_data is "":
+                    finished = True
+                    type = "end"
+                msg = "%s|%s|%s|" % (type,seqno,data)
+                checksum = generate_checksum(msg)
+                msg += checksum
+                packet = self.make_packet(type,seqno,msg)
+                seqno += 1
+                data = next_data
+            else:
+                response = self.receive(500)
+                if response is None:
+                    self.handle_timeout()
+                elif self.splitpacket(response) #duplicate
+                else: #new ack
+
+        
+        
+
+        self.infile.close()
 
     def handle_timeout(self):
         pass
@@ -76,3 +115,4 @@ if __name__ == "__main__":
         s.start()
     except (KeyboardInterrupt, SystemExit):
         exit()
+# vim: set expandtab tabstop=4 shiftwidth=4 softtabstop=4 :
