@@ -3,6 +3,7 @@ import getopt
 
 import Checksum
 import BasicSender
+from collections import deque
 
 '''
 This is a skeleton sender class. Create a fantastic transport protocol here.
@@ -11,6 +12,10 @@ class Sender(BasicSender.BasicSender):
     def __init__(self, dest, port, filename, debug=False, sackMode=False):
         super(Sender, self).__init__(dest, port, filename, debug)
         self.window = 5
+        self.shutdown = False
+        self.finished = False
+        self.queue = deque()
+        self.first_seqno = 0
         if sackMode:
             raise NotImplementedError #remove this line when you implement SACK
 
@@ -19,51 +24,63 @@ class Sender(BasicSender.BasicSender):
         # start packet
         seqno = 0
         data = self.infile.read(1400)
-        start_msg = "start|%s|%s|" % (seqno,data)
-        checksum = generate_checksum(start_msg)
-        start_msg += checksum
-        packet = self.make_packet('start',seqno,start_msg)
-        self.send(packet)
+        self.transmit_packet('start',seqno,data)
+        self.queue.append((seqno, data))
         response = self.receive(500)
         if response is None:
             self.handle_timeout()
         # send data
         data = self.infile.read(1400)
-        finished = False
         type = "data"
-        while not finished:
-            if in_flight <= window:
+        while not self.shutdown:
+            # send as much as possible
+            if seqno < self.queue[0][0] + 5 and not self.finished:
                 seqno += 1
                 next_data = self.infile.read(1400)
                 if next_data is "":
-                    finished = True
-                    type = "end"
-                msg = "%s|%s|%s|" % (type,seqno,data)
-                checksum = generate_checksum(msg)
-                msg += checksum
-                packet = self.make_packet(type,seqno,msg)
-                seqno += 1
+                    self.finished = True
+                    type = 'end'
+                self.transmit_packet(type,seqno,data)
+                self.queue.append((seqno,data))
                 data = next_data
+            # then wait for responses
             else:
                 response = self.receive(500)
                 if response is None:
+                    print "receive: None"
                     self.handle_timeout()
-                elif self.splitpacket(response) #duplicate
-                else: #new ack
-
-        
-        
-
+                else:
+                    msg_type, seqno, data, checksum = self.split_packet(response)
+                    print "receive: %s %s" % (msg_type,seqno)
+                    #TODO validate checksum
+                    if seqno is self.queue[0][0]:
+                        self.handle_dup_ack(seqno)
+                    else:
+                        self.handle_new_ack(seqno)
         self.infile.close()
 
     def handle_timeout(self):
-        pass
+        self.transmit_packet('data',self.queue[0][0],self.queue[0][1])
 
-    def handle_new_ack(self, ack):
-        pass
+    def handle_new_ack(self, seqno):
+        seqnum, data = self.queue.popleft()
+        print "popping seqno: %s" % (seqnum)
+        while seqno > seqnum:
+            print "popping seqno: %s" % (seqnum)
+            seqnum, data = self.queue.popleft()
+    
+    def handle_dup_ack(self, seqno):
+        self.dup_count += 1
+        if self.dup_count >= self.dup_max:
+            self.transmit_packet('data',seqno,self.queue[0][1])
 
-    def handle_dup_ack(self, ack):
-        pass
+    def transmit_packet(self, type, seqno, data):
+        print "send:%s %s" % (type,seqno)
+        msg = "%s|%s|%s|" % (type,seqno,data)
+        checksum = Checksum.generate_checksum(msg)
+        msg += checksum
+        packet = self.make_packet(type,seqno,msg)
+        self.send(packet)
 
     def log(self, msg):
         if self.debug:
