@@ -1,5 +1,6 @@
 import sys
 import getopt
+import time
 
 import Checksum
 import BasicSender
@@ -15,7 +16,10 @@ class Sender(BasicSender.BasicSender):
         self.shutdown = False
         self.finished = False
         self.queue = deque()
-        self.first_seqno = 0
+        self.datasize = 1400
+        self.dup_count = 0
+        self.dup_max = 3
+        self.end_seqno = float("inf")
         if sackMode:
             raise NotImplementedError #remove this line when you implement SACK
 
@@ -23,23 +27,29 @@ class Sender(BasicSender.BasicSender):
     def start(self):
         # start packet
         seqno = 0
-        data = self.infile.read(1400)
+        data = self.infile.read(self.datasize)
         self.transmit_packet('start',seqno,data)
         self.queue.append((seqno, data))
         response = self.receive(500)
         if response is None:
             self.handle_timeout()
+        else:
+            msg_type, seqnum, data, checksum = self.split_packet(response)
+            self.handle_new_ack(int(seqnum))
         # send data
-        data = self.infile.read(1400)
+        data = self.infile.read(self.datasize)
         type = "data"
         while not self.shutdown:
+            time.sleep(1)
             # send as much as possible
-            if seqno < self.queue[0][0] + 5 and not self.finished:
+            if len(self.queue) < self.window and not self.finished:
                 seqno += 1
-                next_data = self.infile.read(1400)
-                if next_data is "":
+                next_data = self.infile.read(self.datasize)
+                print "next_data: %s" % (next_data)
+                if len(next_data) is 0:
                     self.finished = True
                     type = 'end'
+                    self.end_seqno = seqno
                 self.transmit_packet(type,seqno,data)
                 self.queue.append((seqno,data))
                 data = next_data
@@ -50,29 +60,44 @@ class Sender(BasicSender.BasicSender):
                     print "receive: None"
                     self.handle_timeout()
                 else:
-                    msg_type, seqno, data, checksum = self.split_packet(response)
-                    print "receive: %s %s" % (msg_type,seqno)
+                    msg_type, seqnum, data, checksum = self.split_packet(response)
+                    seqnum = int(seqnum)
+                    print "receive: %s %s" % (msg_type,seqnum)
                     #TODO validate checksum
-                    if seqno is self.queue[0][0]:
-                        self.handle_dup_ack(seqno)
+                    if seqnum is self.queue[0][0]: #if seqno is first element in queue, then received ack > seqno but still waiting for seqno
+                        self.handle_dup_ack(int(seqnum))
                     else:
-                        self.handle_new_ack(seqno)
+                        self.handle_new_ack(int(seqnum))
+        print "closing infile"
         self.infile.close()
 
     def handle_timeout(self):
+        print "timeout: resend %s" % (self.queue[0][0])
         self.transmit_packet('data',self.queue[0][0],self.queue[0][1])
 
     def handle_new_ack(self, seqno):
-        seqnum, data = self.queue.popleft()
+        if self.end_seqno + 1 is seqno:
+            self.shutdown = True
+        seqnum = self.queue.popleft()[0]
         print "popping seqno: %s" % (seqnum)
-        while seqno > seqnum:
-            print "popping seqno: %s" % (seqnum)
-            seqnum, data = self.queue.popleft()
+        while (seqno > seqnum + 1):
+            if isinstance(seqno, basestring):
+                print "string"
+            else:
+                print "int"
+            if isinstance(seqnum, basestring):
+                print "string"
+            else:
+                print "int"
+            seqnum = self.queue.popleft()[0]
+            print "popping seqno: %s because seqno %s > seqnum %s" % (seqnum,seqno,seqnum)
+        print "done with ack %s" % (seqno)
     
     def handle_dup_ack(self, seqno):
         self.dup_count += 1
         if self.dup_count >= self.dup_max:
             self.transmit_packet('data',seqno,self.queue[0][1])
+            self.dup_count = 0
 
     def transmit_packet(self, type, seqno, data):
         print "send:%s %s" % (type,seqno)
