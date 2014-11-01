@@ -28,23 +28,29 @@ class Sender(BasicSender.BasicSender):
         # start packet
         seqno = 0
         data = self.infile.read(self.datasize)
-        self.transmit_packet('start',seqno,data)
-        self.queue.append((seqno, data))
-        response = self.receive(500)
-        if response is None:
-            self.handle_timeout()
-        else:
-            msg_type, seqnum, data, checksum = self.split_packet(response)
-            self.handle_new_ack(int(seqnum))
         # send data
-        data = self.infile.read(self.datasize)
-        type = "data"
+        #data = self.infile.read(self.datasize)
+        #type = "data"
         while not self.shutdown:
             time.sleep(0.5) # this is just to make it easier to see what's going on.
 
+            # try to start connection
+            if seqno is 0:
+                self.transmit_packet('start',seqno,data)
+                self.queue.append((seqno, data))
+                response = self.receive(0.5)
+                if response is None:
+                    self.handle_timeout()
+                else:
+                    msg_type, seqnum, data, checksum = self.split_packet(response)
+                    self.handle_new_ack(int(seqnum))
+                    seqno += 1
+                    data = self.infile.read(self.datasize)
+                    type = "data"
+                    
+                
             # send as much as possible
-            if len(self.queue) < self.window and not self.finished:
-                seqno += 1
+            elif len(self.queue) < self.window and not self.finished:
                 next_data = self.infile.read(self.datasize)
                 #print "next_data: %s" % (next_data)
                 if len(next_data) is 0:
@@ -54,10 +60,11 @@ class Sender(BasicSender.BasicSender):
                 self.transmit_packet(type,seqno,data)
                 self.queue.append((seqno,data))
                 data = next_data
+                seqno += 1
 
             # then wait for responses
             else:
-                response = self.receive(500)
+                response = self.receive(0.5)
                 if response is None:
                     print "receive: None"
                     self.handle_timeout()
