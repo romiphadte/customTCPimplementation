@@ -107,14 +107,12 @@ class Sender(BasicSender.BasicSender):
     def handle_timeout(self):
         if not self.shutdown and self.queue:
             self.transmit_packet('data',self.queue[0][0],self.queue[0][1])
-        for i in xrange(1,len(self.queue)):
-            if self.sackMode and self.queue[i][0] not in self.sack_elements:
-                self.transmit_packet('data',self.queue[i][0],self.queue[i][1])
+            self.send_selective_packets()
 
     def handle_new_ack(self, seqno):
         if self.end_seqno + 1 == seqno:
             self.shutdown = True
-        while (seqno > self.queue[0][0] + 1):
+        while (len(self.queue) > 0 and seqno > self.queue[0][0]):
             self.queue.popleft()
         self.dup_count = 0
     
@@ -122,9 +120,7 @@ class Sender(BasicSender.BasicSender):
         self.dup_count += 1
         if self.dup_count >= self.dup_max:
             self.transmit_packet('data',seqno,self.queue[0][1])
-            for i in xrange(1,len(self.queue)):
-                if self.sackMode and self.queue[i][0] not in self.sack_elements:
-                    self.transmit_packet('data',self.queue[i][0],self.queue[i][1])
+            self.send_selective_packets()
             self.dup_count = 0
 
     def transmit_packet(self, type, seqno, data):
@@ -135,6 +131,15 @@ class Sender(BasicSender.BasicSender):
         if self.debug:
             print msg
 
+    def send_selective_packets(self):
+        if len(self.sack_elements)==0:
+            return
+
+        m=max(self.sack_elements)
+        for i in xrange(1,len(self.queue)):
+            if self.sackMode and self.queue[i][0] not in self.sack_elements and self.queue[i][0]<m:
+                self.transmit_packet('data',self.queue[i][0],self.queue[i][1])
+        self.sack_elements=[]
 
 '''
 This will be run if you run this script from the command line. You should not
