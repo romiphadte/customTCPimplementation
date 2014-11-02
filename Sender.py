@@ -1,6 +1,11 @@
+DEBUG=True
+
 import sys
 import getopt
 import time
+
+import pdb
+
 
 import Checksum
 import BasicSender
@@ -20,8 +25,11 @@ class Sender(BasicSender.BasicSender):
         self.dup_count = 0
         self.dup_max = 3
         self.end_seqno = float("inf")
-        if sackMode:
-            raise NotImplementedError #remove this line when you implement SACK
+        self.sackMode=sackMode
+        self.sack_elements=set()
+        self.sack_seq_number=-1
+        #if sackMode:
+        #    raise NotImplementedError #remove this line when you implement SACK
 
     # Main sending loop.
     def start(self):
@@ -35,8 +43,15 @@ class Sender(BasicSender.BasicSender):
                 if response is None:
                     self.handle_timeout()
                 else:
-                    msg_type, r_seqno, data, checksum =\
+                    if(self.sackMode):
+                        msg_type, seqno_sack, data, checksum =\
+                          self.split_packet(response)
+                        r_seqno,sack=seqno_sack.split(';')
+                    else:
+                        msg_type, r_seqno, data, checksum =\
                         self.split_packet(response)
+                        sack=""
+                    self.handle_sack(sack, int(r_seqno))
                     self.handle_new_ack(int(r_seqno))
                     seqno += 1
                     data = self.infile.read(self.datasize)
@@ -59,31 +74,56 @@ class Sender(BasicSender.BasicSender):
                     self.handle_timeout()
                 else:
                     if Checksum.validate_checksum(response):
-                        r_msg_type, r_seqno, r_data, r_checksum =\
+                         
+                        if(self.sackMode):
+                            msg_type, seqno_sack, data, checksum =\
+                              self.split_packet(response)
+                            r_seqno,sack=seqno_sack.split(';')
+                        else:
+                            r_msg_type, r_seqno, r_data, r_checksum =\
                             self.split_packet(response)
+                            sack=""
                         seqnum = int(r_seqno)
+                        self.handle_sack(sack,seqnum)
                         if seqnum is self.queue[0][0]:
                             self.handle_dup_ack(seqnum)
                         else:
                             self.handle_new_ack(seqnum)
         self.infile.close()
 
+    def handle_sack(self, sack, seqnum):
+        print "got sack ", sack, " with seqnum ", seqnum
+        elements=sack.split(',')
+        if seqnum>self.sack_seq_number:
+            self.sack_elements=elements
+            self.sack_seq_number=seqnum
+        elif(seqnum==self.sack_seq_number):
+            self.sack_elements=set(elements+list(self.sack_elements))
+
+
     def handle_timeout(self):
         if not self.shutdown and self.queue:
             self.transmit_packet('data',self.queue[0][0],self.queue[0][1])
+        for i in xrange(1,len(self.queue)):
+            if self.sackMode and self.queue[i][0] not in self.sack_elements:
+                self.transmit_packet('data',self.queue[i][0],self.queue[i][1])
 
     def handle_new_ack(self, seqno):
         if self.end_seqno + 1 == seqno:
-            self.shutdown = True
-        seqnum = self.queue.popleft()[0]
-        while (seqno > seqnum + 1):
-            seqnum = self.queue.popleft()[0]
-        self.dup_count = 0
+            self.shutdown = True           # TODO: what if there was packet
+        if seqno > self.queue[0][0]:                                            #reordering? ACK 5 then ACK 4
+            seqnum = self.queue.popleft()[0]    
+            while (seqno > seqnum + 1):        # TODO: should this be >=?
+                seqnum = self.queue.popleft()[0]
+            self.dup_count = 0
     
     def handle_dup_ack(self, seqno):
-        self.dup_count += 1
-        if self.dup_count >= self.dup_max:
+        self.dup_count += 1400
+        if self.dup_count >= self.dup_max:  # TODO shouldn't this be strictly greater than?
             self.transmit_packet('data',seqno,self.queue[0][1])
+            for i in xrange(1,len(self.queue)):
+                if self.sackMode and self.queue[i][0] not in self.sack_elements:
+                    self.transmit_packet('data',self.queue[i][0],self.queue[i][1])
             self.dup_count = 0
 
     def transmit_packet(self, type, seqno, data):
