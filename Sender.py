@@ -1,6 +1,5 @@
 import sys
 import getopt
-import time
 
 import Checksum
 import BasicSender
@@ -23,8 +22,6 @@ class Sender(BasicSender.BasicSender):
         self.sackMode=sackMode
         self.sack_elements=set()
         self.sack_seq_number=-1
-        #if sackMode:
-        #    raise NotImplementedError #remove this line when you implement SACK
 
     # Main sending loop.
     def start(self):
@@ -71,7 +68,6 @@ class Sender(BasicSender.BasicSender):
                     if Checksum.validate_checksum(response):
                          
                         if(self.sackMode):
-#                            msg_type, seqno_sack, data_sack, checksum =\
                             r_msg_type, seqno_sack, r_data, r_checksum =\
                             self.split_packet(response)
                             r_seqno,sack=seqno_sack.split(';')
