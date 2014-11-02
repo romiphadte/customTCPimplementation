@@ -100,6 +100,9 @@ class Sender(BasicSender.BasicSender):
         elif(seqnum==self.sack_seq_number):
             self.sack_elements=set(elements+list(self.sack_elements))
 
+        self.sack_elements=filter(None, self.sack_elements)
+        print "sack elements ", self.sack_elements 
+        print "\n"
 
     def handle_timeout(self):
         if not self.shutdown and self.queue:
