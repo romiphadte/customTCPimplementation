@@ -76,7 +76,7 @@ class Sender(BasicSender.BasicSender):
                     if Checksum.validate_checksum(response):
                          
                         if(self.sackMode):
-                            msg_type, seqno_sack, data, checksum =\
+                            msg_type, seqno_sack, data_sack, checksum =\
                               self.split_packet(response)
                             r_seqno,sack=seqno_sack.split(';')
                         else:
