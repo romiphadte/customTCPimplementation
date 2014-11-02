@@ -16,8 +16,8 @@ forwarder, so they will magically be run.
 """
 def tests_to_run(forwarder):
     from tests import BasicTest, RandomDropTest, SackRandomDropTest
- #   BasicTest.BasicTest(forwarder, "data/test.jpg")
- #   RandomDropTest.RandomDropTest(forwarder, "data/test.jpg")
+    BasicTest.BasicTest(forwarder, "data/test.jpg")
+    RandomDropTest.RandomDropTest(forwarder, "data/test.jpg")
     SackRandomDropTest.SackRandomDropTest(forwarder, "data/test.jpg")
 """
 Testing is divided into two pieces: this forwarder and a set of test cases in

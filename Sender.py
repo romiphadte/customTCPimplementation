@@ -1,11 +1,6 @@
-DEBUG=True
-
 import sys
 import getopt
 import time
-
-import pdb
-
 
 import Checksum
 import BasicSender
@@ -76,7 +71,7 @@ class Sender(BasicSender.BasicSender):
                     if Checksum.validate_checksum(response):
                          
                         if(self.sackMode):
-                            msg_type, seqno_sack, data, checksum =\
+                            r_msg_type, seqno_sack, r_data, r_checksum =\
                               self.split_packet(response)
                             r_seqno,sack=seqno_sack.split(';')
                         else:
@@ -92,7 +87,6 @@ class Sender(BasicSender.BasicSender):
         self.infile.close()
 
     def handle_sack(self, sack, seqnum):
-        print "got sack ", sack, " with seqnum ", seqnum
         elements=sack.split(',')
         if seqnum>self.sack_seq_number:
             self.sack_elements=elements
@@ -101,8 +95,6 @@ class Sender(BasicSender.BasicSender):
             self.sack_elements=set(elements+list(self.sack_elements))
 
         self.sack_elements=filter(None, self.sack_elements)
-        print "sack elements ", self.sack_elements 
-        print "\n"
 
     def handle_timeout(self):
         if not self.shutdown and self.queue:
