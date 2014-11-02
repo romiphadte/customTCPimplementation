@@ -25,19 +25,16 @@ class Sender(BasicSender.BasicSender):
 
     # Main sending loop.
     def start(self):
-        # start packet
         seqno = 0
         data = self.infile.read(self.datasize)
+        self.queue.append((seqno, data))
         # send data
-        #data = self.infile.read(self.datasize)
-        #type = "data"
         while not self.shutdown:
-            time.sleep(0.5) # this is just to make it easier to see what's going on.
+            #time.sleep(0.5) # this is just to make it easier to see what's going on.
 
             # try to start connection
             if seqno is 0:
                 self.transmit_packet('start',seqno,data)
-                self.queue.append((seqno, data))
                 response = self.receive(0.5)
                 if response is None:
                     self.handle_timeout()
@@ -46,8 +43,7 @@ class Sender(BasicSender.BasicSender):
                     self.handle_new_ack(int(seqnum))
                     seqno += 1
                     data = self.infile.read(self.datasize)
-                    type = "data"
-                    
+                    type = 'data'
                 
             # send as much as possible
             elif len(self.queue) < self.window and not self.finished:
