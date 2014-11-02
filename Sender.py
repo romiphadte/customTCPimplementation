@@ -75,9 +75,8 @@ class Sender(BasicSender.BasicSender):
     def handle_new_ack(self, seqno):
         if self.end_seqno + 1 == seqno:
             self.shutdown = True
-        seqnum = self.queue.popleft()[0]
-        while (seqno > seqnum + 1):
-            seqnum = self.queue.popleft()[0]
+        while (seqno > self.queue[0][0] + 1):
+            self.queue.popleft()
         self.dup_count = 0
     
     def handle_dup_ack(self, seqno):
