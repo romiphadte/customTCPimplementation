@@ -28,27 +28,22 @@ class Sender(BasicSender.BasicSender):
         seqno = 0
         data = self.infile.read(self.datasize)
         self.queue.append((seqno, data))
-        # send data
         while not self.shutdown:
-            #time.sleep(0.5) # this is just to make it easier to see what's going on.
-
-            # try to start connection
             if seqno is 0:
                 self.transmit_packet('start',seqno,data)
                 response = self.receive(0.5)
                 if response is None:
                     self.handle_timeout()
                 else:
-                    msg_type, seqnum, data, checksum = self.split_packet(response)
-                    self.handle_new_ack(int(seqnum))
+                    msg_type, r_seqno, data, checksum =\
+                        self.split_packet(response)
+                    self.handle_new_ack(int(r_seqno))
                     seqno += 1
                     data = self.infile.read(self.datasize)
                     type = 'data'
-                
-            # send as much as possible
+
             elif len(self.queue) < self.window and not self.finished:
                 next_data = self.infile.read(self.datasize)
-                #print "next_data: %s" % (next_data)
                 if len(next_data) is 0:
                     self.finished = True
                     type = 'end'
@@ -58,37 +53,31 @@ class Sender(BasicSender.BasicSender):
                 data = next_data
                 seqno += 1
 
-            # then wait for responses
             else:
                 response = self.receive(0.5)
                 if response is None:
-                    print "receive: None"
                     self.handle_timeout()
                 else:
-                    msg_type, sn, data, checksum = self.split_packet(response)
                     if Checksum.validate_checksum(response):
-                        seqnum = int(sn)
-                        print "receive: %s %s" % (msg_type,seqnum)
-                        if seqnum is self.queue[0][0]: #if seqno is first element in queue, then received ack > seqno but still waiting for seqno
+                        msg_type, r_seqno, data, checksum =\
+                            self.split_packet(response)
+                        seqnum = int(r_seqno)
+                        if seqnum is self.queue[0][0]:
                             self.handle_dup_ack(int(seqnum))
                         else:
                             self.handle_new_ack(int(seqnum))
-        print "closing infile"
         self.infile.close()
 
     def handle_timeout(self):
-        print "timeout: resend %s" % (self.queue[0][0])
         self.transmit_packet('data',self.queue[0][0],self.queue[0][1])
 
     def handle_new_ack(self, seqno):
         if self.end_seqno + 1 is seqno:
             self.shutdown = True
         seqnum = self.queue.popleft()[0]
-        print "popping seqno: %s" % (seqnum)
         while (seqno > seqnum + 1):
             seqnum = self.queue.popleft()[0]
-            print "popping seqno: %s because seqno %s > seqnum %s" % (seqnum,seqno,seqnum)
-        print "done with ack %s" % (seqno)
+        self.dup_count = 0
     
     def handle_dup_ack(self, seqno):
         self.dup_count += 1
@@ -97,7 +86,6 @@ class Sender(BasicSender.BasicSender):
             self.dup_count = 0
 
     def transmit_packet(self, type, seqno, data):
-        print "send:%s %s" % (type,seqno)
         packet = self.make_packet(type,seqno,data)
         self.send(packet)
 
