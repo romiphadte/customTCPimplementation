@@ -42,7 +42,7 @@ class Sender(BasicSender.BasicSender):
                 response = self.receive(0.5)
                 if response is None:
                     self.handle_timeout()
-                else:
+                elif Checksum.validate_checksum(response):
                     if(self.sackMode):
                         msg_type, seqno_sack, data, checksum =\
                           self.split_packet(response)
