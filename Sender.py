@@ -35,12 +35,13 @@ class Sender(BasicSender.BasicSender):
                 if response is None:
                     self.handle_timeout()
                 else:
-                    msg_type, r_seqno, data, checksum =\
-                        self.split_packet(response)
-                    self.handle_new_ack(int(r_seqno))
-                    seqno += 1
-                    data = self.infile.read(self.datasize)
-                    type = 'data'
+                    if Checksum.validate_checksum(response):
+                        msg_type, r_seqno, data, checksum =\
+                            self.split_packet(response)
+                        self.handle_new_ack(int(r_seqno))
+                        seqno += 1
+                        data = self.infile.read(self.datasize)
+                        type = 'data'
 
             elif len(self.queue) < self.window and not self.finished:
                 next_data = self.infile.read(self.datasize)
