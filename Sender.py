@@ -59,20 +59,21 @@ class Sender(BasicSender.BasicSender):
                     self.handle_timeout()
                 else:
                     if Checksum.validate_checksum(response):
-                        msg_type, r_seqno, data, checksum =\
+                        r_msg_type, r_seqno, r_data, r_checksum =\
                             self.split_packet(response)
                         seqnum = int(r_seqno)
                         if seqnum is self.queue[0][0]:
-                            self.handle_dup_ack(int(seqnum))
+                            self.handle_dup_ack(seqnum)
                         else:
-                            self.handle_new_ack(int(seqnum))
+                            self.handle_new_ack(seqnum)
         self.infile.close()
 
     def handle_timeout(self):
-        self.transmit_packet('data',self.queue[0][0],self.queue[0][1])
+        if not self.shutdown and self.queue:
+            self.transmit_packet('data',self.queue[0][0],self.queue[0][1])
 
     def handle_new_ack(self, seqno):
-        if self.end_seqno + 1 is seqno:
+        if self.end_seqno + 1 == seqno:
             self.shutdown = True
         seqnum = self.queue.popleft()[0]
         while (seqno > seqnum + 1):
